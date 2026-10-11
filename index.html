@@ -131,7 +131,6 @@
       <div class="chips" role="group" aria-labelledby="lbl-status" data-group="status">
         <button type="button" class="chip" data-value="all" aria-pressed="false">全部</button>
         <button type="button" class="chip" data-value="open" aria-pressed="true">开放申购</button>
-        <button type="button" class="chip" data-value="limit" aria-pressed="false">限大额</button>
         <button type="button" class="chip" data-value="pause" aria-pressed="false">暂停申购</button>
         <button type="button" class="chip" data-value="closed" aria-pressed="false">封闭期</button>
       </div>
@@ -202,6 +201,11 @@ const CALIB_CLASS = {
 const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ESC[c]);
 
+// 基金状态：限大额是单日额度的一种情形，基金状态按开放申购展示，额度见「单日额度」列
+function statusOf(f) {
+  return f.sgzt === "限大额" ? "开放申购" : f.sgzt;
+}
+
 // 额度数值：开放申购视为无限额（Infinity）；限大额取解析出的元数；未取到为 null
 function quotaOf(f) {
   if (f.sgzt === "开放申购" || f.limit_text === "无限额") return Infinity;
@@ -218,10 +222,9 @@ function passes(f) {
   if (state.cat !== "all" && !(f.categories || []).includes(state.cat)) return false;
   if (state.trade === "buy" && f.sgzt !== "开放申购" && f.sgzt !== "限大额") return false;
   if (state.trade === "redeem" && f.shzt !== "开放赎回") return false;
-  if (s === "open" && f.sgzt !== "开放申购") return false;
-  if (s === "limit" && f.sgzt !== "限大额") return false;
-  if (s === "pause" && f.sgzt !== "暂停申购") return false;
-  if (s === "closed" && f.sgzt !== "封闭期") return false;
+  if (s === "open" && statusOf(f) !== "开放申购") return false;
+  if (s === "pause" && statusOf(f) !== "暂停申购") return false;
+  if (s === "closed" && statusOf(f) !== "封闭期") return false;
 
   // 额度下限只作用于限大额基金；开放申购（无限额）始终满足
   if (f.sgzt === "限大额") {
@@ -240,6 +243,7 @@ function sortValue(f, key) {
     const v = quotaOf(f);
     return v === null ? -1 : v;
   }
+  if (key === "sgzt") return statusOf(f);
   if (key === "categories") return (f.categories || []).join(",");
   if (key === "min_buy") return parseFloat(f.min_buy) || 0;
   if (key === "name") return f.name;
@@ -247,7 +251,8 @@ function sortValue(f, key) {
 }
 
 function rowHtml(f) {
-  const cls = f.sgzt === "开放申购" ? "open" : f.sgzt === "限大额" ? "limit" : "pause";
+  const status = statusOf(f);
+  const cls = status === "开放申购" ? "open" : "pause";
   const quota = f.limit_text || "未取到";
   const cats = (f.categories || []).map((c) => `<span class="cat">${esc(c)}</span>`).join("");
   const calibCls = CALIB_CLASS[f.calib] || "calib-same";
@@ -255,7 +260,7 @@ function rowHtml(f) {
     <td class="code">${esc(f.code)}</td>
     <td class="name"><a href="https://fund.eastmoney.com/${esc(f.code)}.html" target="_blank" rel="noopener">${esc(f.name)}</a></td>
     <td>${cats}</td>
-    <td><span class="st st-${cls}">${esc(f.sgzt)}</span></td>
+    <td><span class="st st-${cls}">${esc(status)}</span></td>
     <td class="num">${esc(f.min_buy || "—")}</td>
     <td class="num">${esc(quota)}</td>
     <td><span class="calib ${calibCls}" title="${esc(f.calib_note)}">${esc(f.calib)}</span></td>
