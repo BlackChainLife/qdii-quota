@@ -129,19 +129,19 @@
     <div class="field">
       <span class="field-label" id="lbl-status">基金状态</span>
       <div class="chips" role="group" aria-labelledby="lbl-status" data-group="status">
-        <button type="button" class="chip" data-value="buyable" aria-pressed="true">可申购</button>
-        <button type="button" class="chip" data-value="open" aria-pressed="false">仅开放</button>
-        <button type="button" class="chip" data-value="limit" aria-pressed="false">仅限大额</button>
-        <button type="button" class="chip" data-value="pause" aria-pressed="false">暂停</button>
         <button type="button" class="chip" data-value="all" aria-pressed="false">全部</button>
+        <button type="button" class="chip" data-value="open" aria-pressed="true">开放申购</button>
+        <button type="button" class="chip" data-value="limit" aria-pressed="false">限大额</button>
+        <button type="button" class="chip" data-value="pause" aria-pressed="false">暂停申购</button>
+        <button type="button" class="chip" data-value="closed" aria-pressed="false">封闭期</button>
       </div>
     </div>
 
     <div class="field">
       <span class="field-label" id="lbl-trade">申购赎回</span>
       <div class="chips" role="group" aria-labelledby="lbl-trade" data-group="trade">
-        <button type="button" class="chip" data-value="all" aria-pressed="true">全部</button>
-        <button type="button" class="chip" data-value="buy" aria-pressed="false">申购</button>
+        <button type="button" class="chip" data-value="all" aria-pressed="false">全部</button>
+        <button type="button" class="chip" data-value="buy" aria-pressed="true">申购</button>
         <button type="button" class="chip" data-value="redeem" aria-pressed="false">赎回</button>
       </div>
     </div>
@@ -149,9 +149,9 @@
     <div class="field">
       <span class="field-label" id="lbl-cat">标的分类</span>
       <div class="chips" role="group" aria-labelledby="lbl-cat" data-group="cat">
-        <button type="button" class="chip" data-value="all" aria-pressed="true">全部</button>
+        <button type="button" class="chip" data-value="all" aria-pressed="false">全部</button>
         <button type="button" class="chip" data-value="标普500" aria-pressed="false">标普 500</button>
-        <button type="button" class="chip" data-value="纳指" aria-pressed="false">纳指</button>
+        <button type="button" class="chip" data-value="纳指" aria-pressed="true">纳指</button>
       </div>
     </div>
 
@@ -190,7 +190,7 @@
 </main>
 
 <script>
-const state = { funds: [], status: "buyable", trade: "all", cat: "all", sortKey: "limit_yuan", sortDir: -1 };
+const state = { funds: [], status: "open", trade: "buy", cat: "纳指", sortKey: "limit_yuan", sortDir: -1 };
 const $ = (id) => document.getElementById(id);
 
 // 校准状态 → 样式：已核对 / 已修正 / 待核实 需要醒目，列表一致 / 未复核 保持低调
@@ -204,7 +204,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ESC[c]);
 
 // 额度数值：开放申购视为无限额（Infinity）；限大额取解析出的元数；未取到为 null
 function quotaOf(f) {
-  if (f.sgzt === "开放" || f.limit_text === "无限额") return Infinity;
+  if (f.sgzt === "开放申购" || f.limit_text === "无限额") return Infinity;
   if (f.limit_yuan == null) return null;
   return f.limit_yuan;
 }
@@ -216,12 +216,12 @@ function passes(f) {
   const s = state.status;
 
   if (state.cat !== "all" && !(f.categories || []).includes(state.cat)) return false;
-  if (state.trade === "buy" && f.sgzt !== "开放" && f.sgzt !== "限大额") return false;
+  if (state.trade === "buy" && f.sgzt !== "开放申购" && f.sgzt !== "限大额") return false;
   if (state.trade === "redeem" && f.shzt !== "开放赎回") return false;
-  if (s === "buyable" && f.sgzt !== "开放" && f.sgzt !== "限大额") return false;
-  if (s === "open" && f.sgzt !== "开放") return false;
+  if (s === "open" && f.sgzt !== "开放申购") return false;
   if (s === "limit" && f.sgzt !== "限大额") return false;
-  if (s === "pause" && f.sgzt !== "暂停") return false;
+  if (s === "pause" && f.sgzt !== "暂停申购") return false;
+  if (s === "closed" && f.sgzt !== "封闭期") return false;
 
   // 额度下限只作用于限大额基金；开放申购（无限额）始终满足
   if (f.sgzt === "限大额") {
@@ -247,7 +247,7 @@ function sortValue(f, key) {
 }
 
 function rowHtml(f) {
-  const cls = f.sgzt === "开放" ? "open" : f.sgzt === "限大额" ? "limit" : "pause";
+  const cls = f.sgzt === "开放申购" ? "open" : f.sgzt === "限大额" ? "limit" : "pause";
   const quota = f.limit_text || "未取到";
   const cats = (f.categories || []).map((c) => `<span class="cat">${esc(c)}</span>`).join("");
   const calibCls = CALIB_CLASS[f.calib] || "calib-same";
