@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QDII 基金申购额度</title>
+<style>
+  :root { --fg:#1d1d1f; --muted:#86868b; --line:#e5e5ea; --bg:#fafafa; --accent:#0a66c2; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; color:var(--fg); background:#fff; }
+  header { padding:20px 24px 12px; border-bottom:1px solid var(--line); }
+  h1 { margin:0 0 4px; font-size:18px; }
+  .meta { color:var(--muted); font-size:12px; }
+  .filters { display:flex; flex-wrap:wrap; gap:12px 16px; align-items:center; padding:12px 24px; background:var(--bg); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:1; }
+  .filters label { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:13px; }
+  .filters input[type=text] { width:180px; }
+  .filters input[type=number] { width:90px; }
+  input, select { font:inherit; padding:5px 8px; border:1px solid #d2d2d7; border-radius:6px; background:#fff; }
+  .count { margin-left:auto; color:var(--muted); font-size:13px; }
+  .wrap { padding:0 24px 40px; overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; margin-top:12px; }
+  th, td { padding:8px 10px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; }
+  th { font-weight:600; font-size:12px; color:var(--muted); cursor:pointer; user-select:none; }
+  th.num, td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  td.name { white-space:normal; min-width:200px; }
+  td a { color:var(--accent); text-decoration:none; }
+  td a:hover { text-decoration:underline; }
+  .tag { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; }
+  .tag.open { background:#e6f4ea; color:#137333; }
+  .tag.limit { background:#fef7e0; color:#8a5a00; }
+  .tag.pause { background:#fce8e6; color:#a50e0e; }
+  .empty { padding:40px 0; text-align:center; color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>QDII 基金申购额度</h1>
+  <div class="meta" id="updated">加载中…</div>
+</header>
+
+<div class="filters">
+  <label>申购状态
+    <select id="status">
+      <option value="buyable" selected>可申购（开放 / 限大额）</option>
+      <option value="open">仅开放申购（无限额）</option>
+      <option value="limit">仅限大额</option>
+      <option value="pause">暂停申购</option>
+      <option value="all">全部</option>
+    </select>
+  </label>
+  <label>单日额度 ≥
+    <input type="number" id="min" value="100" min="0" step="any"> 元
+  </label>
+  <label><input type="checkbox" id="unknown"> 包含额度未公布 / 未取到的限大额基金</label>
+  <label>搜索 <input type="text" id="q" placeholder="代码或名称"></label>
+  <span class="count" id="count"></span>
+</div>
+
+<div class="wrap">
+  <table>
+    <thead>
+      <tr>
+        <th data-key="code">代码</th>
+        <th data-key="name">基金简称</th>
+        <th data-key="sgzt">申购状态</th>
+        <th data-key="limit_yuan" class="num">单日额度</th>
+        <th data-key="shzt">赎回状态</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <div class="empty" id="empty" hidden>没有符合条件的基金</div>
+</div>
+
+<script>
+const state = { funds: [], sortKey: "limit_yuan", sortDir: -1 };
+const $ = (id) => document.getElementById(id);
+
+// 额度数值：开放申购视为无限额（Infinity）；限大额取解析出的元数；未取到为 null
+function quotaOf(f) {
+  if (f.sgzt === "开放") return Infinity;
+  if (f.limit_yuan == null) return null;
+  return f.limit_yuan;
+}
+
+function passes(f) {
+  const status = $("status").value;
+  const min = parseFloat($("min").value);
+  const q = $("q").value.trim().toLowerCase();
+  const quota = quotaOf(f);
+
+  if (status === "buyable" && f.sgzt !== "开放" && f.sgzt !== "限大额") return false;
+  if (status === "open" && f.sgzt !== "开放") return false;
+  if (status === "limit" && f.sgzt !== "限大额") return false;
+  if (status === "pause" && f.sgzt !== "暂停") return false;
+
+  // 额度门槛只作用于有额度信息的基金；开放申购(无限额)始终满足
+  if (f.sgzt === "限大额" && !isNaN(min)) {
+    if (quota === null) return $("unknown").checked;
+    if (quota < min) return false;
+  }
+  if (q && !(f.code.includes(q) || f.name.toLowerCase().includes(q))) return false;
+  return true;
+}
+
+function sortValue(f, key) {
+  if (key === "limit_yuan") {
+    const v = quotaOf(f);
+    return v === null ? -1 : v;
+  }
+  return (f[key] || "").toString();
+}
+
+function render() {
+  const rows = state.funds.filter(passes).sort((a, b) => {
+    const x = sortValue(a, state.sortKey), y = sortValue(b, state.sortKey);
+    return (x > y ? 1 : x < y ? -1 : 0) * state.sortDir;
+  });
+  $("count").textContent = `共 ${rows.length} / ${state.funds.length} 只`;
+  $("empty").hidden = rows.length > 0;
+  $("rows").innerHTML = rows.map((f) => {
+    const tag = f.sgzt === "开放" ? "open" : f.sgzt === "限大额" ? "limit" : "pause";
+    const quota = f.sgzt === "开放" ? "无限额"
+                : f.limit_text ? f.limit_text
+                : "未取到";
+    return `<tr>
+      <td>${f.code}</td>
+      <td class="name"><a href="https://fund.eastmoney.com/${f.code}.html" target="_blank" rel="noopener">${f.name}</a></td>
+      <td><span class="tag ${tag}">${f.sgzt}</span></td>
+      <td class="num">${quota}</td>
+      <td>${f.shzt || ""}</td>
+    </tr>`;
+  }).join("");
+}
+
+document.querySelectorAll("th[data-key]").forEach((th) => {
+  th.addEventListener("click", () => {
+    const key = th.dataset.key;
+    state.sortDir = state.sortKey === key ? -state.sortDir : (key === "limit_yuan" ? -1 : 1);
+    state.sortKey = key;
+    render();
+  });
+});
+["status", "min", "unknown", "q"].forEach((id) => $(id).addEventListener("input", render));
+
+fetch("data.json", { cache: "no-cache" })
+  .then((r) => r.json())
+  .then((d) => {
+    state.funds = d.funds;
+    $("updated").textContent = `数据更新于 ${d.updated}（数据来源：天天基金网）`;
+    render();
+  })
+  .catch(() => { $("updated").textContent = "数据加载失败"; });
+</script>
+</body>
+</html>
